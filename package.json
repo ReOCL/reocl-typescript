@@ -1,0 +1,21 @@
+{
+  "name": "reactiveocl-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "demo": "cd packages/demo-vite && bun run dev",
+    "demo-minimal:build": "bun build packages/reactiveocl/src/index.ts --outfile packages/demo-minimal/reactiveocl.bundle.js --format=esm",
+    "demo-minimal:serve": "bunx serve packages/demo-minimal -p 3000",
+    "test": "bun test",
+    "coverage": "bun test --coverage",
+    "lint": "oxlint --fix",
+    "format": "oxfmt"
+  },
+  "devDependencies": {
+    "oxfmt": "latest",
+    "oxlint": "latest"
+  }
+}

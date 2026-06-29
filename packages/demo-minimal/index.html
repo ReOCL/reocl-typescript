@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ReOCL - Transactional Banking Demo</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <script src="https://cdn.jsdelivr.net/npm/preact@10.25.4/dist/preact.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/preact@10.25.4/hooks/dist/hooks.umd.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/htm@3/dist/htm.js"></script>
+  </head>
+
+  <body>
+    <script type="module">
+      import {
+        ReactiveStore,
+        invariant,
+        intSignal,
+        computed,
+        effect,
+      } from "./reactiveocl.bundle.js";
+      const html = htm.bind(preact.h);
+      const { useState, useEffect } = preactHooks;
+
+      // Step 1: Register the meta-model
+      const store = new ReactiveStore();
+      store.registerClass("PersonAccount", {
+        checking: { tag: "Int", initial: 300 },
+        savings: { tag: "Int", initial: 700 },
+      });
+
+      // Step 2: Compile invariants into reactive signals
+      class CompiledPersonAccount {
+        constructor(store, checking, savings) {
+          this.obj = store.getClass("PersonAccount").create({ checking, savings });
+          this.checking$ = intSignal(this.obj, "checking");
+          this.savings$ = intSignal(this.obj, "savings");
+          this.conservation$ = computed(() => {
+            const curr = this.checking$.value + this.savings$.value;
+            const prev = this.obj.preInt("checking") + this.obj.preInt("savings");
+            return curr === prev;
+          });
+        }
+      }
+
+      const pa = new CompiledPersonAccount(store, 300, 700);
+      const inv = invariant(
+        "conservation",
+        pa.conservation$,
+        "self.checking + self.savings = self.checking@pre + self.savings@pre",
+      );
+
+      // Step 3: Transaction
+      const tx = store.transaction(inv.value$);
+      const personAccount = pa.obj;
+
+      function doTransfer(amount, from, to) {
+        tx.begin();
+        tx.mutate(() => {
+          personAccount.setInt(from, pa.obj.int(from) - amount);
+          personAccount.setInt(to, pa.obj.int(to) + amount);
+        });
+        return tx.commit();
+      }
+
+      // Step 4: Signals → UI
+      //
+      // @preact/signals-core is framework-agnostic and does not auto-update
+      // Preact components. We bridge signals to Preact state via effect().
+      // When @preact/signals (with Preact integration) is available,
+      // this bridge becomes unnecessary - read signals directly in JSX.
+      function BalanceCard() {
+        const [checking, setChecking] = useState(pa.checking$.value);
+        const [savings, setSavings] = useState(pa.savings$.value);
+        const [ok, setOk] = useState(pa.conservation$.value);
+
+        useEffect(
+          () =>
+            effect(() => {
+              setChecking(pa.checking$.value);
+              setSavings(pa.savings$.value);
+              setOk(pa.conservation$.value);
+            }),
+          [],
+        );
+
+        return html`
+          <div class="card ${ok ? "border-success" : "border-danger"}">
+            <div class="card-body vstack gap-1">
+              <p class="mb-0">Checking: <strong>€${checking}</strong></p>
+              <p class="mb-0">Savings: <strong>€${savings}</strong></p>
+              <p class="mb-0 ${ok ? "text-success" : "text-danger fw-bold"}">
+                Conservation: ${ok ? "OK" : "VIOLATED"}
+              </p>
+            </div>
+          </div>
+        `;
+      }
+
+      function TransactionDemo() {
+        const [msg, setMsg] = useState("");
+
+        return html`
+          <div class="vstack gap-3">
+            <${BalanceCard} />
+            <div class="d-flex gap-2">
+              <button
+                class="btn btn-outline-primary"
+                onClick=${() => {
+                  const r = doTransfer(100, "savings", "checking");
+                  setMsg(r ? "€100 transferred" : "€100 rolled back");
+                }}
+              >
+                To Checking
+              </button>
+              <button
+                class="btn btn-outline-primary"
+                onClick=${() => {
+                  const r = doTransfer(100, "checking", "savings");
+                  setMsg(r ? "€100 transferred" : "€100 rolled back");
+                }}
+              >
+                To Savings
+              </button>
+              <button
+                class="btn btn-outline-danger"
+                onClick=${() => {
+                  tx.begin();
+                  personAccount.setInt("checking", pa.checking$.value + 500);
+                  const r = tx.commit();
+                  setMsg(r ? "€500 added" : "€500 rolled back");
+                }}
+              >
+                +500 checking (one-sided)
+              </button>
+            </div>
+            <p class="mb-0 ${msg.includes("rolled") ? "text-danger fw-bold" : "text-success"}">
+              ${msg}
+            </p>
+          </div>
+        `;
+      }
+
+      function App() {
+        return html`
+          <div class="container vstack gap-4 py-5" style="max-width:480px">
+            <h1 class="mb-0">Transactional Banking Demo</h1>
+            <${TransactionDemo} />
+          </div>
+        `;
+      }
+
+      preact.render(html`<${App} />`, document.body);
+    </script>
+  </body>
+</html>

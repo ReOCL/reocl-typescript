@@ -1,0 +1,20 @@
+{
+  "name": "reactiveocl-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "bunx tsc && bunx vite build"
+  },
+  "dependencies": {
+    "@preact/signals-core": "1.14.3",
+    "preact": "10.29.3",
+    "reactiveocl": "workspace:*"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "2.10.5",
+    "typescript": "6.0.3",
+    "vite": "8.1.0",
+    "vite-plugin-singlefile": "2.3.3"
+  }
+}

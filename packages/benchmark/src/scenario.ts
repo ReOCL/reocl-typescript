@@ -1,0 +1,71 @@
+import type { Employee } from "./model";
+import { faker } from "@faker-js/faker";
+import { setRandomSeed } from "bun:jsc";
+
+// Seed the random number generator for reproducibility
+setRandomSeed(42);
+faker.seed(42);
+
+export type Mutation = { kind: "add"; employee: Employee } | { kind: "remove"; employee: Employee };
+
+export type Scenario = {
+  initialEmployees: Employee[];
+  mutations: Mutation[];
+  capacity: number;
+};
+
+export function makeScenario(n: number, totalMutations: number, activeRatio = 0.5): Scenario {
+  const initialEmployees: Employee[] = [];
+  const live: Employee[] = [];
+
+  let nextId = 0;
+
+  for (let i = 0; i < n; i++) {
+    const employee: Employee = {
+      id: nextId++,
+      firstName: faker.person.firstName(),
+      lastName: faker.person.lastName(),
+      active: Math.random() < activeRatio,
+    };
+    initialEmployees.push(employee);
+    live.push(employee);
+  }
+
+  const mutations: Mutation[] = [];
+
+  for (let i = 0; i < totalMutations; i++) {
+    if (i % 2 === 0 && live.length > 0) {
+      // REMOVE: pick one currently-live employee.
+      const idx = Math.floor(Math.random() * live.length);
+      const employee = live[idx]!;
+
+      mutations.push({ kind: "remove", employee });
+
+      // Swap-remove from live array.
+      const last = live[live.length - 1]!;
+      live[idx] = last;
+      live.pop();
+    } else {
+      // ADD: create a fresh employee.
+      const employee: Employee = {
+        id: nextId++,
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+        active: Math.random() < activeRatio,
+      };
+
+      mutations.push({ kind: "add", employee });
+      live.push(employee);
+    }
+  }
+
+  // Capacity is high enough that the invariant usually remains true,
+  // but the benchmark still has to maintain the exact active count.
+  const capacity = Math.ceil(0.6 * n);
+
+  return {
+    initialEmployees,
+    mutations,
+    capacity,
+  };
+}
